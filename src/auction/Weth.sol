@@ -43,9 +43,12 @@ contract Weth is ReentrancyGuard {
         if(amount == 0) revert Nopendingwithdrawal();
         
         pendingWithdrawals[msg.sender] = 0;
+
+        emit Withdrawal(msg.sender, amount); 
+
         (bool success, ) = msg.sender.call{value: amount}("");
         if(!success) revert ETHTransferFailed();
-        emit Withdrawal(msg.sender, amount); 
+
     }
 
     function balances(address account) public view returns (uint256) {

@@ -143,7 +143,7 @@ contract NftAuctionWithCredit is INftAuction,IERC721Receiver, ReentrancyGuard {
         // transfer remaining balance to seller
         uint256 balance = weth.balanceOf(bidinfo.bidder);
         if(balance < winnerPrice)revert NotEnoughBalance();
-        bool success=weth.transferFrom(bidinfo.bidder,goods.seller,winnerPrice);
+        bool success=weth.transferFrom(msg.sender,goods.seller,winnerPrice);
         if(!success)revert NotEnoughBalance();
 
         return true;

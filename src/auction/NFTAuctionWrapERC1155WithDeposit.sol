@@ -119,7 +119,7 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
         if (depositRatio < MIN_DEPOSIT_RATIO || depositRatio > MAX_DEPOSIT_RATIO) revert  InvalidDepositRatio();
         if (depositRatio < serviceFeeRatio) revert InvalidDepositRatio();
         //if (bidderToPrice[goodsId].bidder != address(0)) revert GoodsAlreadyInAuction();
-        if (NFTMANAGER.balanceOf(msg.sender,wTokenId) != 1) revert SellerNotMatch();
+        if (NFTMANAGER.balanceOf(msg.sender,wTokenId) < 1) revert SellerNotMatch();
 
         auctionNftId++;
 
@@ -195,11 +195,10 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
         bidderToPrice[auctionId] = BidInfo({bidder: msg.sender, price: price, bidDeadline: biddl<goods.bidDeadline? biddl:goods.bidDeadline});
         deposit[msg.sender] = depositAmount;
 
+        emit BidPlaced(auctionId, msg.sender, price, depositAmount);
         
         // refund old bidder's deposit
         _dealDeposit(auctionId, oldBidder, depositAmount);
-
-        emit BidPlaced(auctionId, msg.sender, price, depositAmount);
 
         return true;
     }
@@ -213,10 +212,11 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
             if(oldDeposit>0)
             {
                 deposit[oldBidder] = 0;
+                
+                emit DepositRefunded(auctionId, oldBidder, oldDeposit);
+
                 bool succRefund = WETH.transfer(oldBidder, oldDeposit);
                 if (!succRefund) revert RefundFailed();
-
-                emit DepositRefunded(auctionId, oldBidder, oldDeposit);
             }
         }
 
@@ -250,6 +250,10 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
         uint256 tokenId = goods.wrapperTokenId;
         uint256 depositPaid = deposit[msg.sender]; 
         uint256 remainingToPay = winnerPrice - depositPaid;
+        
+        
+        emit AuctionSettled(auctionId, msg.sender, depositPaid, remainingToPay);
+        
         if(depositPaid > 0)
         {
             deposit[msg.sender] = 0;
@@ -271,8 +275,6 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
         // transfer goods to winner
         NFTMANAGER.unwrapTo(tokenId, bidinfo.bidder);
 
-        emit AuctionSettled(auctionId, msg.sender, depositPaid, remainingToPay);
-
         return true;
     }
 
@@ -293,16 +295,15 @@ contract AuctionWrapERC1155WithDeposit is INftAuction,IERC721Receiver, Reentranc
    
         uint256 forfeitDeposit = deposit[winner];
  
+   
+        emit AuctionPenalized(auctionId, winner, forfeitDeposit);
+
         if (forfeitDeposit > 0) 
         {
             deposit[winner] = 0;
             require(WETH.transfer(goods.seller, forfeitDeposit), "Deposit transfer failed");
         }
-        
 
         NFTMANAGER.safeTransferFrom(address(this), goods.seller, goods.wrapperTokenId,1,"");
-        
-  
-        emit AuctionPenalized(auctionId, winner, forfeitDeposit);
     }
 }

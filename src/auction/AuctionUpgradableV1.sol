@@ -226,11 +226,11 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
         bidderToPrice[goodsId] = BidInfo({bidder: msg.sender, price: price, bidDeadline: biddl<goods.bidDeadline? biddl:goods.bidDeadline});
         deposit[msg.sender] = depositAmount;
 
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit BidPlaced(goodsId, msg.sender, price, depositAmount);
         
         // refund old bidder's deposit
         _dealDeposit(goodsId, oldBidder, depositAmount);
-
-        emit BidPlaced(goodsId, msg.sender, price, depositAmount);
 
         return true;
     }
@@ -244,10 +244,11 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
             if(oldDeposit>0)
             {
                 deposit[oldBidder] = 0;
-                bool succRefund = WETH.transfer(oldBidder, oldDeposit);
-                if (!succRefund) revert RefundFailed();
 
                 emit DepositRefunded(goodsId, oldBidder, oldDeposit);
+
+                bool succRefund = WETH.transfer(oldBidder, oldDeposit);
+                if (!succRefund) revert RefundFailed();
             }
         }
 
@@ -281,6 +282,9 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
         uint256 winnerId = goods.tokenId;
         uint256 depositPaid = deposit[msg.sender]; 
         uint256 remainingToPay = winnerPrice - depositPaid;
+
+        emit AuctionSettled(goodsId, msg.sender, depositPaid, remainingToPay);
+
         if(depositPaid > 0)
         {
             deposit[msg.sender] = 0;
@@ -302,8 +306,6 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
         // transfer goods to winner
         NFTMANAGER.safeTransferFrom(address(this), bidinfo.bidder, winnerId);
 
-        emit AuctionSettled(goodsId, msg.sender, depositPaid, remainingToPay);
-
         return true;
     }
 
@@ -323,7 +325,8 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
 
    
         uint256 forfeitDeposit = deposit[winner];
- 
+        emit AuctionPenalized(goodsId, winner, forfeitDeposit);
+
         if (forfeitDeposit > 0) 
         {
             deposit[winner] = 0;
@@ -332,8 +335,5 @@ contract AuctionUpgradableV1 is INftAuction,IERC721Receiver, ReentrancyGuard,Ini
         
 
         NFTMANAGER.safeTransferFrom(address(this), goods.seller, goods.tokenId);
-        
-  
-        emit AuctionPenalized(goodsId, winner, forfeitDeposit);
     }
 }

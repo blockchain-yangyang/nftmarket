@@ -8,6 +8,6 @@ contract NftERC721 is ERC721
     constructor() ERC721("NFTMarket", "NFTM") {}    
 
     function mint(address to, uint256 tokenId) public {
-        _mint(to, tokenId);
+        _safeMint(to, tokenId);
     }
 }

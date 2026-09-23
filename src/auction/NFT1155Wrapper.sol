@@ -58,20 +58,17 @@ contract NFT1155Wrapper is ERC1155, ERC721Holder {
                 return tokenURI;
             } catch {
                 // 回退到基础URI
-                return string(abi.encodePacked(super.uri(wrapperTokenId), wrapperTokenId.toString(), ".json"));
+                return string(abi.encodePacked(super.uri(wrapperTokenId), wrapperTokenId, ".json"));
             }
         }
         
-        return string(abi.encodePacked(super.uri(wrapperTokenId), wrapperTokenId.toString(), ".json"));
+        return string(abi.encodePacked(super.uri(wrapperTokenId), wrapperTokenId, ".json"));
     }
     
     // 包装ERC721 NFT
     function wrapERC721(address nftContract, uint256 tokenId) public returns (uint256) {
         require(IERC721(nftContract).ownerOf(tokenId) == msg.sender, "Not owner");
         require(wrapperIdOf[nftContract][tokenId] == 0, "Already wrapped");
-        
-        // 接收NFT
-        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
         
         // 生成唯一包装ID
         uint256 wrapperTokenId = _generateWrapperId(nftContract, tokenId);
@@ -85,11 +82,17 @@ contract NFT1155Wrapper is ERC1155, ERC721Holder {
         });
         
         wrapperIdOf[nftContract][tokenId] = wrapperTokenId;
-        
+
         // 铸造包装代币
         _mint(msg.sender, wrapperTokenId, 1, "");
-        
+
+        // 记录事件
+        // forge-lint: disable-next-line(reentrancy-events)
         emit AssetWrapped(wrapperTokenId, nftContract, tokenId, AssetType.ERC721, msg.sender);
+        
+        // 接收NFT
+        IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
+
         return wrapperTokenId;
     }
     
@@ -124,10 +127,11 @@ contract NFT1155Wrapper is ERC1155, ERC721Holder {
         delete wrappedAssets[wrapperTokenId];
         delete wrapperIdOf[asset.contractAddress][asset.tokenId];
         
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit AssetUnwrapped(wrapperTokenId, asset.contractAddress, asset.tokenId, msg.sender);
+
         // 返回原始NFT
         IERC721(asset.contractAddress).safeTransferFrom(address(this), msg.sender, asset.tokenId);
-        
-        emit AssetUnwrapped(wrapperTokenId, asset.contractAddress, asset.tokenId, msg.sender);
     }
 
     // 允许代币所有者将解包后的原始NFT直接发送给指定地址
@@ -145,6 +149,9 @@ contract NFT1155Wrapper is ERC1155, ERC721Holder {
         // 4. 清理存储
         delete wrappedAssets[wrapperTokenId];
         delete wrapperIdOf[asset.contractAddress][asset.tokenId];
+        
+        // forge-lint: disable-next-line(reentrancy-events)
+        emit AssetUnwrapped(wrapperTokenId, asset.contractAddress, asset.tokenId, finalRecipient);
 
         // 5. **核心区别**：将原始NFT转给 `finalRecipient`（中标者），而不是 `msg.sender`
         IERC721(asset.contractAddress).safeTransferFrom(
@@ -152,13 +159,11 @@ contract NFT1155Wrapper is ERC1155, ERC721Holder {
             finalRecipient, // 转给中标者
             asset.tokenId
         );
-
-        emit AssetUnwrapped(wrapperTokenId, asset.contractAddress, asset.tokenId, finalRecipient);
     }
     
     // 生成唯一的包装ID
     function _generateWrapperId(address nftContract, uint256 tokenId) internal returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(nftContract, tokenId, block.timestamp, _nextTokenId++)));
+        return uint256(keccak256(abi.encodePacked(nftContract, tokenId, _nextTokenId++)));
     }
     
     function _setBaseURI(string memory baseURI) internal {
